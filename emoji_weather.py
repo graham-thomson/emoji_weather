@@ -77,8 +77,8 @@ class EmojiWeather(object):
 if __name__ == "__main__":
 
     e = EmojiWeather(
-        api_key="79fe262602d3baccc8328e49d34ababb",
-        zip_code="01970"
+        api_key="123",
+        zip_code="456"
         )
 
     
