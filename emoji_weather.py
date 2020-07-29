@@ -10,10 +10,11 @@ import argparse
 
 class EmojiWeather(object):
 
-    def __init__(self, api_key, zip_code, country_code="us"):
+    def __init__(self, api_key, zip_code, country_code="us", name=None):
         self.api_key = api_key
         self.zip_code = zip_code
         self.country_code = country_code
+        self.name = name
 
         self.cache_file = ".emoji_weather_cache"
 
@@ -24,6 +25,12 @@ class EmojiWeather(object):
             )
 
         self.thermometer_emoji = u"\U0001F321 "
+        self.high_emoji = u'\U00002B06'
+        self.low_emoji = u'\U00002B07'
+
+        self.current_temp = None
+        self.high_temp = None
+        self.low_temp = None
 
     def get_current_weather(self):
 
@@ -32,15 +39,17 @@ class EmojiWeather(object):
         if os.path.isfile(self.cache_file):
             logging.info(f"Found cached file: {self.cache_file}...")
             with open(self.cache_file, "r") as cache:
-                cached_weather = json.load(cache)
-                cached_weather_time = int(list(cached_weather.keys()).pop())
+                cached_weather = json.load(cache).get(self.zip_code)
 
-                if (req_time - cached_weather_time) < 1800:
-                    logging.info("Recently checked weather, returning cached results...")
-                    current_weather = cached_weather.get(str(cached_weather_time))
-                    return current_weather
+                if cached_weather:
+                    cached_weather_time = int(list(cached_weather.keys()).pop())
 
-        logging.info("No recent cached weather found, hitting API...")
+                    if (req_time - cached_weather_time) < 1800:
+                        logging.info("Recently checked weather, returning cached results...")
+                        current_weather = cached_weather.get(str(cached_weather_time))
+                        return current_weather
+
+        logging.info(f"No recent cached weather found for {self.zip_code}, hitting API...")
 
         params = {
             "zip": f"{self.zip_code},{self.country_code}",
@@ -55,20 +64,26 @@ class EmojiWeather(object):
         if req.code == 200:
             with open(self.cache_file, "w") as cache:
                 logging.info("Caching weather for future use...")
-                json.dump({req_time: resp}, cache)
+                json.dump({self.zip_code: {req_time: resp}}, cache)
 
         return resp
 
     def current_temperature(self, unit="f"):
         current_weather = self.get_current_weather()
         temp = current_weather.get("main").get("temp")
+        high = current_weather.get("main").get("temp_max")
+        low = current_weather.get("main").get("temp_min")
+
+        self.current_temp = temp
+        self.high_temp = high
+        self.low_temp = low
+
         if unit == "f":
             return EmojiWeather.kelvin_to_f(k=temp)
         elif unit == "c":
             return EmojiWeather.kelvin_to_c(k=temp)
         else:
             return temp
-
 
     def return_weather_emoji(self):
         # https://unicode.org/emoji/charts/full-emoji-list.html
@@ -108,6 +123,18 @@ class EmojiWeather(object):
         current_weather = self.get_current_weather()
         return current_weather.get("name")
 
+
+    def return_weather_message(self):
+
+        if self.name:
+            greeting = f"Good {self.return_daypart()}, {self.name.title()}!"
+        else:
+            greeting = f"Good {self.return_daypart()}!"
+
+        return u"\U0001F4BB " + greeting + f" It's currently {self.return_weather_emoji()} " \
+        + f"and {self.current_temperature():.0f} degrees {self.thermometer_emoji} in {self.return_location()}." \
+        + f" Today: {self.high_emoji} {EmojiWeather.kelvin_to_f(self.high_temp):.0f} {self.low_emoji} {EmojiWeather.kelvin_to_f(self.low_temp):.0f}"
+
     @staticmethod
     def return_daypart(hour=-1):
         if hour == -1:
@@ -130,12 +157,18 @@ class EmojiWeather(object):
         return EmojiWeather.kelvin_to_c(k=k) * (9/5) + 32
 
 
+def get_ip_location():
+    r = urllib.request.urlopen("http://ipinfo.io")
+    return json.loads(r.read())
+
+
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--key", required=False, action="store", default=None)
-    parser.add_argument("--name", required=False, action="store", default=None)
-    parser.add_argument("--zip", required=False, action="store", default="02108")
+    parser.add_argument("--key", required=False, action="store", type=str, default=None)
+    parser.add_argument("--name", required=False, action="store", type=str, default=None)
+    parser.add_argument("--zip", required=False, action="store", type=str, default=None)
+    parser.add_argument("--locate", required=False, action="store_true", default=False)
     args = parser.parse_args()
 
     if not args.key:
@@ -143,10 +176,16 @@ if __name__ == "__main__":
     else:
         api_key = args.key
 
+    if not args.zip and args.locate:
+        zip_code = get_ip_location().get("postal")
+    else:
+        zip_code = args.zip
+
     e = EmojiWeather(
         api_key=api_key,
-        zip_code=args.zip
+        zip_code=zip_code,
+        name=args.name
         )
 
-    print(f"Good {e.return_daypart()}! It's currently {e.return_weather_emoji()} and {e.current_temperature():.0f} degrees {e.thermometer_emoji} in {e.return_location()}.")
+    print(e.return_weather_message())
     
