@@ -10,18 +10,20 @@ import argparse
 
 class EmojiWeather(object):
 
-    def __init__(self, api_key, zip_code, country_code="us", name=None):
+    def __init__(self, api_key, zip_code, country_code="us", name=None, log=None):
         self.api_key = api_key
         self.zip_code = zip_code
         self.country_code = country_code
         self.name = name
+        self.log = log
 
         self.cache_file = ".emoji_weather_cache"
 
         logging.basicConfig(
-            filename="emoji_weather.log", 
-            format="%(asctime)s %(levelname)s %(message)s", datefmt="%Y-%m-%d %H:%M:%S",
-            level=logging.INFO
+            filename=self.log, 
+            format="%(asctime)s %(levelname)s %(message)s", 
+            datefmt="%Y-%m-%d %H:%M:%S",
+            level=logging.DEBUG if self.log else logging.INFO
             )
 
         self.thermometer_emoji = u"\U0001F321 "
@@ -37,7 +39,7 @@ class EmojiWeather(object):
         req_time = round(time.time())
 
         if os.path.isfile(self.cache_file):
-            logging.info(f"Found cached file: {self.cache_file}...")
+            logging.debug(f"Found cached file: {self.cache_file}...")
             with open(self.cache_file, "r") as cache:
                 cached_weather = json.load(cache).get(self.zip_code)
 
@@ -45,11 +47,11 @@ class EmojiWeather(object):
                     cached_weather_time = int(list(cached_weather.keys()).pop())
 
                     if (req_time - cached_weather_time) < 1800:
-                        logging.info("Recently checked weather, returning cached results...")
+                        logging.debug("Recently checked weather, returning cached results...")
                         current_weather = cached_weather.get(str(cached_weather_time))
                         return current_weather
 
-        logging.info(f"No recent cached weather found for {self.zip_code}, hitting API...")
+        logging.debug(f"No recent cached weather found for {self.zip_code}, hitting API...")
 
         params = {
             "zip": f"{self.zip_code},{self.country_code}",
@@ -63,10 +65,11 @@ class EmojiWeather(object):
 
         if req.code == 200:
             with open(self.cache_file, "w") as cache:
-                logging.info("Caching weather for future use...")
+                logging.debug("Caching weather for future use...")
                 json.dump({self.zip_code: {req_time: resp}}, cache)
 
         return resp
+
 
     def current_temperature(self, unit="f"):
         current_weather = self.get_current_weather()
@@ -85,6 +88,7 @@ class EmojiWeather(object):
         else:
             return temp
 
+
     def return_weather_emoji(self):
         # https://unicode.org/emoji/charts/full-emoji-list.html
         # https://openweathermap.org/weather-conditions
@@ -101,7 +105,6 @@ class EmojiWeather(object):
             daytime = True
         else:
             daytime = False
-
 
         weather_emoji_dict = {
                 "clear sky": u"\U0001F31E" if daytime else u"\U0001F319",
@@ -169,6 +172,7 @@ if __name__ == "__main__":
     parser.add_argument("--name", required=False, action="store", type=str, default=None)
     parser.add_argument("--zip", required=False, action="store", type=str, default=None)
     parser.add_argument("--locate", required=False, action="store_true", default=False)
+    parser.add_argument("--log", required=False, action="store", type=str, default=None)
     args = parser.parse_args()
 
     if not args.key:
@@ -184,7 +188,8 @@ if __name__ == "__main__":
     e = EmojiWeather(
         api_key=api_key,
         zip_code=zip_code,
-        name=args.name
+        name=args.name,
+        log=args.log
         )
 
     print(e.return_weather_message())
