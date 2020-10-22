@@ -1,6 +1,9 @@
 import urllib.request
 import urllib.parse
+from urllib.error import HTTPError, URLError
+import socket
 import os
+from pathlib import Path
 import json
 import time
 import datetime as dt
@@ -16,8 +19,10 @@ class EmojiWeather(object):
         self.country_code = country_code
         self.name = name
         self.log = log
+        self.timeout = 5
 
-        self.cache_file = ".emoji_weather_cache"
+        self.user_home = str(Path.home())
+        self.cache_file = os.path.join(self.user_home, ".emoji_weather_cache")
 
         logging.basicConfig(
             filename=self.log, 
@@ -30,9 +35,10 @@ class EmojiWeather(object):
         self.high_emoji = u'\U00002B06'
         self.low_emoji = u'\U00002B07'
 
-        self.current_temp = None
-        self.high_temp = None
-        self.low_temp = None
+        self.current_weather = self.get_current_weather()
+        self.current_location = self.return_location()
+        self.current_weather_emoji = self.return_weather_emoji()
+        self.low_temp, self.current_temp, self.high_temp = self.current_temperature(unit="f")
 
     def get_current_weather(self):
 
@@ -58,48 +64,56 @@ class EmojiWeather(object):
             "appid": self.api_key
         }
 
-        url = f"http://api.openweathermap.org/data/2.5/weather?{urllib.parse.urlencode(params)}"
-        req = urllib.request.urlopen(url)
-        
-        resp = json.loads(req.read().decode())
+        try:
+            url = f"http://api.openweathermap.org/data/2.5/weather?{urllib.parse.urlencode(params)}"
+            req = urllib.request.urlopen(url, timeout=self.timeout)
+            resp = json.loads(req.read().decode())
+        except HTTPError as error:
+            logging.error(f"Data not returned because {error}. URL: {url}")
+            return None
+        except URLError as error:
+            if isinstance(error.reason, socket.timeout):
+                logging.error(f"Socket timed out. URL: {url}")
+            else:
+                logging.error(f"Other Error: {error}. URL: {url}")
+            return None
+        else:
+            if req.code == 200:
+                with open(self.cache_file, "w") as cache:
+                    logging.debug("Caching weather for future use...")
+                    json.dump({self.zip_code: {req_time: resp}}, cache)
 
-        if req.code == 200:
-            with open(self.cache_file, "w") as cache:
-                logging.debug("Caching weather for future use...")
-                json.dump({self.zip_code: {req_time: resp}}, cache)
-
-        return resp
-
+            return resp
 
     def current_temperature(self, unit="f"):
-        current_weather = self.get_current_weather()
-        temp = current_weather.get("main").get("temp")
-        high = current_weather.get("main").get("temp_max")
-        low = current_weather.get("main").get("temp_min")
+        if not self.current_weather:
+            return [None] * 3
 
-        self.current_temp = temp
-        self.high_temp = high
-        self.low_temp = low
+        temp = self.current_weather.get("main").get("temp")
+        high = self.current_weather.get("main").get("temp_max")
+        low = self.current_weather.get("main").get("temp_min")
+
+        temps = [low, temp, high]
 
         if unit == "f":
-            return EmojiWeather.kelvin_to_f(k=temp)
+            return [EmojiWeather.kelvin_to_f(k=t) for t in temps]
         elif unit == "c":
-            return EmojiWeather.kelvin_to_c(k=temp)
+            return [EmojiWeather.kelvin_to_c(k=t) for t in temps]
         else:
-            return temp
-
+            return temps
 
     def return_weather_emoji(self):
         # https://unicode.org/emoji/charts/full-emoji-list.html
         # https://openweathermap.org/weather-conditions
 
-        current_weather = self.get_current_weather()
+        if not self.current_weather:
+            return None
         
         t_now = round(time.time())
-        sunrise = int(current_weather.get("sys").get("sunrise"))
-        sunset = int(current_weather.get("sys").get("sunset"))
+        sunrise = int(self.current_weather.get("sys").get("sunrise"))
+        sunset = int(self.current_weather.get("sys").get("sunset"))
 
-        weather = current_weather.get("weather").pop(0).get("description")
+        weather = self.current_weather.get("weather").pop(0).get("description")
 
         if sunrise < t_now < sunset:
             daytime = True
@@ -121,11 +135,10 @@ class EmojiWeather(object):
 
         return weather_emoji_dict.get(weather)
 
-
     def return_location(self):
-        current_weather = self.get_current_weather()
-        return current_weather.get("name")
-
+        if not self.current_weather:
+            return None
+        return self.current_weather.get("name")
 
     def return_weather_message(self):
 
@@ -134,12 +147,16 @@ class EmojiWeather(object):
         else:
             greeting = f"Good {self.return_daypart()}!"
 
-        return u"\U0001F4BB " + greeting + f" It's currently {self.return_weather_emoji()} " \
-        + f"and {self.current_temperature():.0f} degrees {self.thermometer_emoji} in {self.return_location()}." \
-        + f" Today: {self.high_emoji} {EmojiWeather.kelvin_to_f(self.high_temp):.0f} {self.low_emoji} {EmojiWeather.kelvin_to_f(self.low_temp):.0f}"
+        if self.current_weather:
+            weather_message = u"\U0001F4BB " + greeting + f" It's currently {self.current_weather_emoji} " \
+            + f"and {self.current_temp:.0f} degrees {self.thermometer_emoji} in {self.current_location}." \
+            + f" Today: {self.high_emoji} {self.high_temp:.0f} {self.low_emoji} {self.low_temp:.0f}"
+        else:
+            weather_message = ""
+        return weather_message
 
     @staticmethod
-    def return_daypart(hour=-1):
+    def return_daypart(hour: int = -1) -> str:
         if hour == -1:
             hour = dt.datetime.now().hour
         if 2 < hour < 12:
@@ -152,16 +169,16 @@ class EmojiWeather(object):
             return "night"
 
     @staticmethod
-    def kelvin_to_c(k):
+    def kelvin_to_c(k: float) -> float:
         return k - 273.15
 
     @staticmethod
-    def kelvin_to_f(k):
+    def kelvin_to_f(k: float) -> float:
         return EmojiWeather.kelvin_to_c(k=k) * (9/5) + 32
 
 
-def get_ip_location():
-    r = urllib.request.urlopen("http://ipinfo.io")
+def get_ip_location() -> dict:
+    r = urllib.request.urlopen("http://ipinfo.io", timeout=5)
     return json.loads(r.read())
 
 
@@ -193,4 +210,3 @@ if __name__ == "__main__":
         )
 
     print(e.return_weather_message())
-    
