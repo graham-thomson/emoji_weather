@@ -130,10 +130,15 @@ class EmojiWeather(object):
                 "rain": u"\U0001F327" if daytime else u"\U0001F319\U0001F327",
                 "thunderstorm": u"\U000026C8" if daytime else u"\U0001F319\U000026C8",
                 "snow": u"\U0001F328" if daytime else u"\U0001F319\U0001F328",
-                "mist": u"\U0001F326" if daytime else u"\U0001F319\U0001F327"
+                "mist": u"\U0001F326" if daytime else u"\U0001F319\U0001F327",
+                "overcast clouds": u"\U00002601" if daytime else u"\U0001F319\U00002601"
         }
 
-        return weather_emoji_dict.get(weather)
+        weather_emoji = weather_emoji_dict.get(weather)
+        if not weather_emoji:
+            logging.error(f"No emoji for '{weather}'")
+            return weather_emoji_dict.get("clear sky")
+        return weather_emoji
 
     def return_location(self):
         if not self.current_weather:
