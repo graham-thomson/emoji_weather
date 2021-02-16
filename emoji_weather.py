@@ -129,7 +129,8 @@ class EmojiWeather(object):
                 "light rain": u"\U0001F326" if daytime else u"\U0001F319\U0001F327",
                 "rain": u"\U0001F327" if daytime else u"\U0001F319\U0001F327",
                 "thunderstorm": u"\U000026C8" if daytime else u"\U0001F319\U000026C8",
-                "snow": u"\U0001F328" if daytime else u"\U0001F319\U0001F328",
+                "snow": u"\U00002744" if daytime else u"\U0001F319\U00002744",
+                "light snow": u"\U0001F328" if daytime else u"\U0001F319\U0001F328",
                 "mist": u"\U0001F326" if daytime else u"\U0001F319\U0001F327",
                 "overcast clouds": u"\U00002601" if daytime else u"\U0001F319\U00002601"
         }
