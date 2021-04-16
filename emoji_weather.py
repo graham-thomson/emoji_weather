@@ -133,7 +133,8 @@ class EmojiWeather(object):
                 "light snow": u"\U0001F328" if daytime else u"\U0001F319\U0001F328",
                 "mist": u"\U0001F326" if daytime else u"\U0001F319\U0001F327",
                 "overcast clouds": u"\U00002601" if daytime else u"\U0001F319\U00002601",
-                "moderate rain": u"\U0001F326" if daytime else u"\U0001F319\U0001F327"
+                "moderate rain": u"\U0001F326" if daytime else u"\U0001F319\U0001F327",
+                "heavy intensity rain": u"\U0001F327" if daytime else u"\U0001F319\U0001F327"
         }
 
         weather_emoji = weather_emoji_dict.get(weather)
